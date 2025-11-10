@@ -13,51 +13,60 @@ namespace lenguajevisuales2_segundoparcial.Controllers
     {
         private readonly ApplicationDbContext _db;
         private readonly IFileService _fileService;
-
         public ArchivosController(ApplicationDbContext db, IFileService fileService)
         {
             _db = db;
             _fileService = fileService;
         }
 
+        // POST api/archivos/upload-zip?ci=123
         [HttpPost("upload-zip")]
         public async Task<IActionResult> UploadZip([FromQuery] string ci, IFormFile zipFile)
         {
-            if (string.IsNullOrWhiteSpace(ci)) return BadRequest("Parámetro 'ci' es requerido.");
-            if (zipFile == null || zipFile.Length == 0) return BadRequest("Se requiere un archivo zip.");
+            if (string.IsNullOrWhiteSpace(ci)) return BadRequest("CI requerido");
+            if (zipFile == null || zipFile.Length == 0) return BadRequest("Zip requerido");
 
-            var cliente = await _db.Clientes.FirstOrDefaultAsync(c => c.CI == ci);
-            if (cliente == null) return NotFound("Cliente no encontrado.");
+            // Validar cliente
+            var cliente = await _db.Clientes.FindAsync(ci);
+            if (cliente == null) return NotFound("Cliente no encontrado");
 
-            var ext = Path.GetExtension(zipFile.FileName);
-            if (!string.Equals(ext, ".zip", StringComparison.OrdinalIgnoreCase))
-                return BadRequest("Solo se acepta archivo .zip");
-
-            using var ms = new MemoryStream();
-            await zipFile.CopyToAsync(ms);
-            ms.Position = 0;
-
-            using var archive = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: false);
-            var created = new List<ArchivoCliente>();
-
-            foreach (var entry in archive.Entries)
+            // Guardar zip temporal
+            var tempPath = Path.GetTempFileName();
+            using (var fs = System.IO.File.Create(tempPath))
             {
-                if (string.IsNullOrEmpty(entry.Name)) continue;
-                using var entryStream = entry.Open();
-                var url = _fileService.SaveExtractedFile(ci, entry.FullName, entryStream);
-
-                var registro = new ArchivoCliente
-                {
-                    CICliente = ci,
-                    NombreArchivo = entry.Name,
-                    UrlArchivo = url
-                };
-                _db.ArchivoClientes.Add(registro);
-                created.Add(registro);
+                await zipFile.CopyToAsync(fs);
             }
 
+            var created = new List<ArchivoCliente>();
+
+            using (var archive = ZipFile.OpenRead(tempPath))
+            {
+                foreach (var entry in archive.Entries.Where(e => !string.IsNullOrEmpty(e.Name)))
+                {
+                    using var entryStream = entry.Open();
+                    var url = await _fileService.SaveStreamAsFileAsync(ci, entry.Name, entryStream);
+                    var registro = new ArchivoCliente
+                    {
+                        CICliente = ci,
+                        NombreArchivo = entry.Name,
+                        UrlArchivo = url
+                    };
+                    _db.ArchivoClientes.Add(registro);
+                    created.Add(registro);
+                }
+            }
+
+            System.IO.File.Delete(tempPath);
             await _db.SaveChangesAsync();
+
             return Ok(created.Select(c => new { c.IdArchivo, c.NombreArchivo, c.UrlArchivo }));
+        }
+
+        [HttpGet("by-ci/{ci}")]
+        public async Task<IActionResult> GetByCi(string ci)
+        {
+            var files = await _db.ArchivoClientes.Where(a => a.CICliente == ci).Select(a => new { a.IdArchivo, a.NombreArchivo, a.UrlArchivo }).ToListAsync();
+            return Ok(files);
         }
     }
 }

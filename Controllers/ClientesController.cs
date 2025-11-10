@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using lenguajevisuales2_segundoparcial.Data;
-using lenguajevisuales2_segundoparcial.Models;
-using lenguajevisuales2_segundoparcial.Services;
 using lenguajevisuales2_segundoparcial.DTOs;
+using lenguajevisuales2_segundoparcial.Models;
 
 namespace lenguajevisuales2_segundoparcial.Controllers
 {
@@ -12,36 +11,35 @@ namespace lenguajevisuales2_segundoparcial.Controllers
     public class ClientesController : ControllerBase
     {
         private readonly ApplicationDbContext _db;
-        private readonly IFileService _fileService;
-
-        public ClientesController(ApplicationDbContext db, IFileService fileService)
-        {
-            _db = db;
-            _fileService = fileService;
-        }
+        public ClientesController(ApplicationDbContext db) => _db = db;
 
         [HttpPost]
-        [Consumes("multipart/form-data")]
         public async Task<IActionResult> Register([FromForm] RegisterClienteDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            if (dto.FotoCasa1 == null || dto.FotoCasa2 == null || dto.FotoCasa3 == null)
-                return BadRequest("Se requieren FotoCasa1, FotoCasa2 y FotoCasa3.");
-
             if (await _db.Clientes.AnyAsync(c => c.CI == dto.CI))
-                return Conflict("Cliente con esa CI ya existe.");
+                return Conflict(new { message = "CI ya registrado" });
 
-            var cliente = new Cliente
+            Cliente cliente = new Cliente
             {
                 CI = dto.CI,
                 Nombres = dto.Nombres,
                 Direccion = dto.Direccion,
-                Telefono = dto.Telefono,
-                FotoCasa1 = await _fileService.ReadFileToBytesAsync(dto.FotoCasa1),
-                FotoCasa2 = await _fileService.ReadFileToBytesAsync(dto.FotoCasa2),
-                FotoCasa3 = await _fileService.ReadFileToBytesAsync(dto.FotoCasa3),
+                Telefono = dto.Telefono
             };
+
+            byte[] ToBytes(Microsoft.AspNetCore.Http.IFormFile f)
+            {
+                if (f == null) return null;
+                using var ms = new MemoryStream();
+                f.CopyTo(ms);
+                return ms.ToArray();
+            }
+
+            cliente.FotoCasa1 = ToBytes(dto.FotoCasa1);
+            cliente.FotoCasa2 = ToBytes(dto.FotoCasa2);
+            cliente.FotoCasa3 = ToBytes(dto.FotoCasa3);
 
             _db.Clientes.Add(cliente);
             await _db.SaveChangesAsync();
@@ -54,7 +52,6 @@ namespace lenguajevisuales2_segundoparcial.Controllers
         {
             var cliente = await _db.Clientes
                 .Include(c => c.Archivos)
-                .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.CI == ci);
 
             if (cliente == null) return NotFound();

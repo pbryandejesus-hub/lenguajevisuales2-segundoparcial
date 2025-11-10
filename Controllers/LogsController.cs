@@ -12,7 +12,6 @@ namespace lenguajevisuales2_segundoparcial.Controllers
         private readonly ApplicationDbContext _db;
         public LogsController(ApplicationDbContext db) => _db = db;
 
-        // GET /api/logs?page=1&pageSize=50
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
         {
@@ -21,15 +20,14 @@ namespace lenguajevisuales2_segundoparcial.Controllers
 
             var total = await _db.LogApis.CountAsync();
             var logs = await _db.LogApis
-                        .OrderByDescending(l => l.DateTime)
-                        .Skip((page - 1) * pageSize)
-                        .Take(pageSize)
-                        .ToListAsync();
+                .OrderByDescending(l => l.DateTime)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
             return Ok(new { total, page, pageSize, data = logs });
         }
 
-        // GET /api/logs/{id}
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {

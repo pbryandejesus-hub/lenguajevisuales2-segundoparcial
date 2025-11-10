@@ -1,10 +1,9 @@
-using Microsoft.EntityFrameworkCore;
 using lenguajevisuales2_segundoparcial.Data;
 using lenguajevisuales2_segundoparcial.Middleware;
-using lenguajevisuales2_segundoparcial.Services;
 using lenguajevisuales2_segundoparcial.Models;
+using lenguajevisuales2_segundoparcial.Services;
+using Microsoft.EntityFrameworkCore;
 using System.Text;
-using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,19 +25,21 @@ var app = builder.Build();
 // Middleware de logging
 app.UseMiddleware<ExceptionLoggingMiddleware>();
 
-if (app.Environment.IsDevelopment())
+// Habilitar Swagger en producción y MonsterASP
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Mi API v1");
+    c.RoutePrefix = string.Empty; // / abre Swagger
+});
 
 app.UseHttpsRedirection();
-app.UseStaticFiles(); // para servir archivos de wwwroot/uploads
+app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();
 app.MapControllers();
 
-// Seed datos de prueba si no existen
+// Seed datos
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -47,7 +48,6 @@ using (var scope = app.Services.CreateScope())
         var db = services.GetRequiredService<ApplicationDbContext>();
         var fileService = services.GetRequiredService<IFileService>();
 
-        // Asegurar DB creada
         db.Database.EnsureCreated();
 
         if (!db.Clientes.Any())
@@ -67,7 +67,6 @@ using (var scope = app.Services.CreateScope())
             db.Clientes.Add(cliente);
             db.SaveChanges();
 
-            // Crear carpeta y archivos de prueba
             var uploadsRoot = fileService.EnsureUploadsFolder();
             var clienteFolder = Path.Combine(uploadsRoot, ci);
             if (!Directory.Exists(clienteFolder)) Directory.CreateDirectory(clienteFolder);
@@ -78,11 +77,8 @@ using (var scope = app.Services.CreateScope())
             var file2 = Path.Combine(clienteFolder, "imagen_prueba.jpg");
             File.WriteAllText(file2, "Contenido ficticio imagen");
 
-            var url1 = $"/uploads/{ci}/documento_prueba.txt";
-            var url2 = $"/uploads/{ci}/imagen_prueba.jpg";
-
-            db.ArchivoClientes.Add(new ArchivoCliente { CICliente = ci, NombreArchivo = "documento_prueba.txt", UrlArchivo = url1 });
-            db.ArchivoClientes.Add(new ArchivoCliente { CICliente = ci, NombreArchivo = "imagen_prueba.jpg", UrlArchivo = url2 });
+            db.ArchivoClientes.Add(new ArchivoCliente { CICliente = ci, NombreArchivo = "documento_prueba.txt", UrlArchivo = $"/uploads/{ci}/documento_prueba.txt" });
+            db.ArchivoClientes.Add(new ArchivoCliente { CICliente = ci, NombreArchivo = "imagen_prueba.jpg", UrlArchivo = $"/uploads/{ci}/imagen_prueba.jpg" });
 
             db.LogApis.Add(new LogApi
             {
