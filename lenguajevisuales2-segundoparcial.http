@@ -1,0 +1,6 @@
+@lenguajevisuales2_segundoparcial_HostAddress = http://localhost:5028
+
+GET {{lenguajevisuales2_segundoparcial_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
